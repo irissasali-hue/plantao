@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Exportar moldes de arte</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #14161f; color: #e8e8f0; margin: 24px; }
+  h1 { font-size: 20px; } h2 { font-size: 16px; margin-top: 28px; color: #ffe08a; }
+  p, li { color: #b8bcd0; max-width: 760px; line-height: 1.5; }
+  code { background: #232636; padding: 1px 5px; border-radius: 4px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; }
+  .item { background: #1e2130; border-radius: 8px; padding: 12px; text-align: center; }
+  .item img { image-rendering: pixelated; display: block; margin: 0 auto 8px; background:
+    repeating-conic-gradient(#2a2d3c 0 25%, #22253a 0 50%) 0 0 / 16px 16px; }
+  a { color: #8cc4f4; }
+  #game { display: none; }
+</style>
+</head>
+<body>
+<h1>Moldes de arte do Plantão</h1>
+<p>Estes PNGs são a arte atual, gerada em código, já no tamanho e layout que o jogo espera.
+Baixe, pinte por cima no seu editor de pixel art (Aseprite, Piskel, LibreSprite…), salve em <code>assets/</code>
+e registre o caminho em <code>content/art.js</code>. Fundo transparente = vazio.</p>
+<canvas id="game"></canvas>
+<div id="out"></div>
+
+<script src="../content/art.js"></script>
+<script src="../content/team.js"></script>
+<script src="../content/cases.js"></script>
+<script src="../content/world.js"></script>
+<script src="../content/maps.js"></script>
+<script src="../content/library.js"></script>
+<script src="../js/input.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/sprites.js"></script>
+<script>
+'use strict';
+const out = document.getElementById('out');
+
+function section(title, desc) {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  out.appendChild(h);
+  if (desc) { const p = document.createElement('p'); p.innerHTML = desc; out.appendChild(p); }
+  const g = document.createElement('div');
+  g.className = 'grid';
+  out.appendChild(g);
+  return g;
+}
+
+function addItem(grid, canvas, file, zoom = 4) {
+  const d = document.createElement('div');
+  d.className = 'item';
+  const img = document.createElement('img');
+  img.src = canvas.toDataURL('image/png');
+  img.width = canvas.width * zoom;
+  img.height = canvas.height * zoom;
+  const a = document.createElement('a');
+  a.href = img.src;
+  a.download = file.split('/').pop();
+  a.textContent = file;
+  d.append(img, a);
+  grid.appendChild(d);
+}
+
+// --- tiles: cada tipo pintado cercado de si mesmo (sem bordas de transição) ---
+const chars = Object.keys(TILES);
+const maxIdx = Math.max(...chars.map(c => TILES[c].index));
+const COLS = 8;
+const sheet = makeCanvas(COLS * TILE, (Math.floor(maxIdx / COLS) + 1) * TILE);
+for (const ch of chars) {
+  const rows = [ch.repeat(3), ch.repeat(3), ch.repeat(3)];
+  const tmp = makeCanvas(48, 48);
+  paintTile(tmp.getContext('2d'), rows, 1, 1);
+  const i = TILES[ch].index;
+  sheet.getContext('2d').drawImage(tmp, 16, 16, 16, 16, (i % COLS) * TILE, Math.floor(i / COLS) * TILE, 16, 16);
+}
+const legend = chars.map(c => `${TILES[c].index}: <code>${c}</code> ${TILES[c].name}`).join(' · ');
+addItem(section('Tileset → assets/tiles.png', `Blocos de 16x16, ${COLS} por linha. ${legend}`), sheet, 'assets/tiles.png');
+
+// --- personagens: folha 48x48 (colunas: parado, passo A, passo B · linhas: frente, costas, lado direito) ---
+function sheetOf(spr) {
+  const c = makeCanvas(48, 48), g = c.getContext('2d');
+  ['down', 'up', 'side'].forEach((dir, row) => spr[dir].forEach((f, col) => g.drawImage(f, col * 16, row * 16)));
+  return c;
+}
+const charGrid = section('Personagens → assets/chars/&lt;chave&gt;.png',
+  'Folha 48x48. Colunas: parado · passo A · passo B. Linhas: frente · costas · lado (virado para a DIREITA).');
+const pals = { ...FALLBACK_PALS };
+for (const k in CASES) pals[k] = CASES[k].pal;
+for (const k in TEAM) pals[k] = TEAM[k].pal;
+for (const m of Object.values(MAPS)) for (const n of m.npcs || []) if (n.pal) pals[n.sprite || n.id] = n.pal;
+for (const k in pals) addItem(charGrid, sheetOf(buildChar(pals[k])), `assets/chars/${k}.png`, 4);
+
+// --- retratos de batalha: sprite ampliado como ponto de partida ---
+const portraitGrid = section('Retratos de batalha → assets/portraits/&lt;caso&gt;.png',
+  'Ponto de partida em 64x64 — pode redesenhar em qualquer tamanho (ex.: 80x80) com mais detalhes. A base da imagem fica apoiada na plataforma.');
+for (const k of Object.keys(CASES)) {
+  const c = makeCanvas(64, 64), g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(buildChar(CASES[k].pal).down[0], 0, 0, 64, 64);
+  addItem(portraitGrid, c, `assets/portraits/${k}.png`, 2);
+}
+</script>
+</body>
+</html>
